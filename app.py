@@ -1,5 +1,4 @@
 import os
-import json
 import pandas as pd
 from dash import Dash, dcc, html, Input, Output, State, callback_context
 import dash_bootstrap_components as dbc
@@ -7,9 +6,10 @@ import plotly.express as px
 
 # Initialize the app
 app = Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
+server = app.server  # Expose the server for deployment
 
 # File paths
-COURSE_CATALOG_FILE = r"C:\Users\alici\Desktop\Degree Tracker\MSIS CATALOG SPREADSHEET - Sheet1 (2).csv"
+COURSE_CATALOG_FILE = "MSIS_CATALOG_SPREADSHEET.csv"
 
 # Load course catalog
 if not os.path.exists(COURSE_CATALOG_FILE):
@@ -66,6 +66,7 @@ app.layout = dbc.Container(
             ),
             className="d-flex justify-content-end"
         ),
+        html.Div(id="page-content"),
     ],
     fluid=True,
 )
@@ -95,21 +96,9 @@ def update_charts_and_status(add_clicks, grad_clicks, course_code):
     )
 
     # Default placeholder charts
-    pie_chart = px.pie(
-        values=[1],
-        names=["No Data"],
-        title="Progress Overview",
-    )
-    bar_chart = px.bar(
-        x=["No Data"],
-        y=[0],
-        title="Credit Distribution",
-    )
-    column_chart = px.bar(
-        x=["No Data"],
-        y=[0],
-        title="Courses Completed",
-    )
+    pie_chart = px.pie(values=[1], names=["No Data"], title="Progress Overview")
+    bar_chart = px.bar(x=["No Data"], y=[0], title="Credit Distribution")
+    column_chart = px.bar(x=["No Data"], y=[0], title="Courses Completed")
 
     if triggered_id == "add-course-button":
         if not course_code or add_clicks is None:
@@ -185,6 +174,7 @@ def update_charts_and_status(add_clicks, grad_clicks, course_code):
 
     return notifications_content, pie_chart, bar_chart, column_chart, achievements_html
 
+
 @app.callback(
     Output("page-content", "className"),
     Input("dark-mode-toggle", "value"),
@@ -193,10 +183,6 @@ def toggle_dark_mode(is_dark_mode):
     return "dark-mode" if is_dark_mode else "light-mode"
 
 # Run the server
-import os
-
-# At the end of your app.py
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8050))  # Use the PORT variable provided by Render
-    app.run_server(debug=True, host="0.0.0.0", port=port)  # Bind to all IPs and use the port
-
+    port = int(os.environ.get("PORT", 8050))  # Use PORT environment variable
+    app.run_server(debug=True, host="0.0.0.0", port=port)
