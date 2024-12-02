@@ -1,14 +1,14 @@
 import streamlit as st
 import plotly.express as px
 from datetime import datetime, timedelta
+import calendar
 
 # Initialize session state
-if "user_courses" not in st.session_state:
-    st.session_state["user_courses"] = []
-if "notifications" not in st.session_state:
-    st.session_state["notifications"] = []
-if "achievements" not in st.session_state:
-    st.session_state["achievements"] = []
+if "user_data" not in st.session_state:
+    st.session_state["user_data"] = {}
+
+if "current_user" not in st.session_state:
+    st.session_state["current_user"] = None
 
 # Hardcoded course data
 # Hardcoded course data
@@ -45,13 +45,32 @@ courses = [
     {"Course Code": "CIS 5980", "Course Name": "Graduate Directed Study", "Credits": 3, "Prerequisites": "None", "Description": "Investigation of an approved project leading to written report.", "Type": "Elective", "Status": "Not Started"},
 ]
 
-
 core_courses = [course["Course Code"] for course in courses if course["Type"] == "Core"]
 total_credits_required = 30
 
-# Helper function to add notification
-def add_notification(message):
-    st.session_state["notifications"].append({"message": message, "timestamp": datetime.now()})
+# Helper Functions
+def initialize_user(user_name):
+    if user_name not in st.session_state["user_data"]:
+        st.session_state["user_data"][user_name] = {
+            "user_courses": [],
+            "notifications": [],
+            "achievements": [],
+            "homework": [],
+        }
+
+def add_notification(user, message):
+    st.session_state["user_data"][user]["notifications"].append(
+        {"message": message, "timestamp": datetime.now()}
+    )
+
+def display_calendar(user):
+    st.subheader("Calendar")
+    st.write("🗓️ Manage your schedule:")
+    calendar_grid = calendar.HTMLCalendar().formatmonth(datetime.now().year, datetime.now().month)
+    st.markdown(f"<div style='border: 1px solid #ddd; padding: 10px;'>{calendar_grid}</div>", unsafe_allow_html=True)
+
+    for hw in st.session_state["user_data"][user].get("homework", []):
+        st.write(f"📅 **{hw['due_date']}**: {hw['course']} - {hw['details']}")
 
 # Application Layout
 st.set_page_config(
@@ -60,115 +79,128 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Sidebar Tabs
+# Login/Signup
 with st.sidebar:
     st.title("Degree Progress Tracker")
+    if st.session_state["current_user"] is None:
+        username = st.text_input("Enter your username:")
+        if st.button("Login"):
+            if username:
+                initialize_user(username)
+                st.session_state["current_user"] = username
+                st.success(f"Welcome, {username}!")
+            else:
+                st.error("Username cannot be empty.")
+    else:
+        st.sidebar.write(f"Logged in as: {st.session_state['current_user']}")
+        if st.button("Logout"):
+            st.session_state["current_user"] = None
+
+# Main Application
+if st.session_state["current_user"]:
+    user = st.session_state["current_user"]
     tab = st.radio("Navigate", ["Dashboard", "Profile", "Homework Tracker", "Calendar"], index=0)
 
-# Dashboard Tab
-if tab == "Dashboard":
-    st.header("Dashboard")
-    
-    # Notifications Bar
-    if st.session_state["notifications"]:
+    # Dashboard Tab
+    if tab == "Dashboard":
+        st.header(f"Dashboard - {user}")
+
+        # Notifications
         st.info("Notifications:")
-        for note in st.session_state["notifications"][-5:]:
+        for note in st.session_state["user_data"][user]["notifications"][-5:]:
             st.write(f"🛎️ {note['message']} at {note['timestamp'].strftime('%H:%M:%S')}")
 
-    # Course Selection
-    st.subheader("Add Courses")
-    selected_course = st.selectbox(
-        "Select a course to add:",
-        [f"{course['Course Code']} - {course['Course Name']}" for course in courses]
-    )
-    if st.button("Add Course"):
-        course_code = selected_course.split(" - ")[0]
-        if course_code not in st.session_state["user_courses"]:
-            st.session_state["user_courses"].append(course_code)
-            add_notification(f"Added course: {selected_course}")
-            st.success(f"Course {selected_course} added!")
-        else:
-            st.warning(f"Course {selected_course} already added.")
+        # Course Selection
+        st.subheader("Add Courses")
+        selected_course = st.selectbox(
+            "Select a course to add:",
+            [f"{course['Course Code']} - {course['Course Name']}" for course in courses]
+        )
+        if st.button("Add Course"):
+            course_code = selected_course.split(" - ")[0]
+            if course_code not in st.session_state["user_data"][user]["user_courses"]:
+                st.session_state["user_data"][user]["user_courses"].append(course_code)
+                add_notification(user, f"Added course: {selected_course}")
+                st.success(f"Course {selected_course} added!")
+            else:
+                st.warning(f"Course {selected_course} already added.")
 
-    # Graduation Status Check
-    st.subheader("Graduation Status")
-    completed_credits = len(st.session_state["user_courses"]) * 3
-    remaining_credits = total_credits_required - completed_credits
-    missing_core_courses = [core for core in core_courses if core not in st.session_state["user_courses"]]
+        # Graduation Status Check
+        st.subheader("Graduation Status")
+        completed_credits = len(st.session_state["user_data"][user]["user_courses"]) * 3
+        remaining_credits = total_credits_required - completed_credits
+        missing_core_courses = [core for core in core_courses if core not in st.session_state["user_data"][user]["user_courses"]]
 
-    if st.button("Check Graduation Status"):
-        if completed_credits >= total_credits_required and not missing_core_courses:
-            st.success("🎓 Congratulations! You're ready to graduate!")
-            if "Degree Completed!" not in st.session_state["achievements"]:
-                st.session_state["achievements"].append("Degree Completed!")
-        else:
-            st.warning(
-                f"Credits Completed: {completed_credits}/{total_credits_required}. Missing Core Courses: {', '.join(missing_core_courses) or 'None'}."
-            )
+        if st.button("Check Graduation Status"):
+            if completed_credits >= total_credits_required and not missing_core_courses:
+                st.success("🎓 Congratulations! You're ready to graduate!")
+                if "Degree Completed!" not in st.session_state["user_data"][user]["achievements"]:
+                    st.session_state["user_data"][user]["achievements"].append("Degree Completed!")
+            else:
+                st.warning(
+                    f"Credits Completed: {completed_credits}/{total_credits_required}. Missing Core Courses: {', '.join(missing_core_courses) or 'None'}."
+                )
 
-    # Badges / Achievements
-    st.subheader("Achievements")
-    if completed_credits >= 15 and "Halfway There!" not in st.session_state["achievements"]:
-        st.session_state["achievements"].append("Halfway There!")
-    for achievement in st.session_state["achievements"]:
-        st.write(f"🏅 {achievement}")
+        # Achievements
+        st.subheader("Achievements")
+        if completed_credits >= 15 and "Halfway There!" not in st.session_state["user_data"][user]["achievements"]:
+            st.session_state["user_data"][user]["achievements"].append("Halfway There!")
+        for achievement in st.session_state["user_data"][user]["achievements"]:
+            st.write(f"🏅 {achievement}")
 
-    # Charts
-    st.subheader("Progress Visualizations")
-    pie_chart = px.pie(
-        names=["Completed", "Remaining"],
-        values=[completed_credits, remaining_credits],
-        title="Progress Overview",
-    )
-    st.plotly_chart(pie_chart, use_container_width=True)
+        # Charts
+        st.subheader("Progress Visualizations")
+        pie_chart = px.pie(
+            names=["Completed", "Remaining"],
+            values=[completed_credits, remaining_credits],
+            title="Progress Overview",
+        )
+        st.plotly_chart(pie_chart, use_container_width=True)
 
-    bar_chart = px.bar(
-        x=["Completed", "Remaining"],
-        y=[completed_credits, remaining_credits],
-        labels={"x": "Status", "y": "Credits"},
-        title="Credit Distribution",
-    )
-    st.plotly_chart(bar_chart, use_container_width=True)
+        bar_chart = px.bar(
+            x=["Completed", "Remaining"],
+            y=[completed_credits, remaining_credits],
+            labels={"x": "Status", "y": "Credits"},
+            title="Credit Distribution",
+        )
+        st.plotly_chart(bar_chart, use_container_width=True)
 
-    column_chart = px.bar(
-        x=st.session_state["user_courses"],
-        y=[3] * len(st.session_state["user_courses"]),
-        labels={"x": "Courses", "y": "Credits"},
-        title="Courses Completed",
-    )
-    st.plotly_chart(column_chart, use_container_width=True)
+        column_chart = px.bar(
+            x=st.session_state["user_data"][user]["user_courses"],
+            y=[3] * len(st.session_state["user_data"][user]["user_courses"]),
+            labels={"x": "Courses", "y": "Credits"},
+            title="Courses Completed",
+        )
+        st.plotly_chart(column_chart, use_container_width=True)
 
-# Profile Tab
-elif tab == "Profile":
-    st.header("Profile")
-    st.write("Student Name: [Your Name]")
-    st.write(f"Courses Completed: {len(st.session_state['user_courses'])}")
-    st.write("Achievements:")
-    for achievement in st.session_state["achievements"]:
-        st.write(f"🏅 {achievement}")
+    # Profile Tab
+    elif tab == "Profile":
+        st.header(f"Profile - {user}")
+        st.write("Student Name: [Your Name]")
+        st.write(f"Courses Completed: {len(st.session_state['user_data'][user]['user_courses'])}")
+        st.write("Achievements:")
+        for achievement in st.session_state["user_data"][user]["achievements"]:
+            st.write(f"🏅 {achievement}")
 
-# Homework Tracker Tab
-elif tab == "Homework Tracker":
-    st.header("Homework Tracker")
-    if "homework" not in st.session_state:
-        st.session_state["homework"] = []
+    # Homework Tracker Tab
+    elif tab == "Homework Tracker":
+        st.header("Homework Tracker")
+        if "homework" not in st.session_state["user_data"][user]:
+            st.session_state["user_data"][user]["homework"] = []
 
-    with st.form("Add Homework"):
-        hw_course = st.selectbox("Select Course", [course["Course Code"] for course in courses])
-        hw_details = st.text_input("Homework Details")
-        hw_due_date = st.date_input("Due Date", datetime.now() + timedelta(days=7))
-        submitted = st.form_submit_button("Add Homework")
-        if submitted:
-            st.session_state["homework"].append({"course": hw_course, "details": hw_details, "due_date": hw_due_date})
-            st.success("Homework added!")
+        with st.form("Add Homework"):
+            hw_course = st.selectbox("Select Course", [course["Course Code"] for course in courses])
+            hw_details = st.text_input("Homework Details")
+            hw_due_date = st.date_input("Due Date", datetime.now() + timedelta(days=7))
+            submitted = st.form_submit_button("Add Homework")
+            if submitted:
+                st.session_state["user_data"][user]["homework"].append({"course": hw_course, "details": hw_details, "due_date": hw_due_date})
+                st.success("Homework added!")
 
-    st.subheader("Homework List")
-    for hw in st.session_state["homework"]:
-        st.write(f"📘 **{hw['course']}**: {hw['details']} (Due: {hw['due_date']})")
+        st.subheader("Homework List")
+        for hw in st.session_state["user_data"][user]["homework"]:
+            st.write(f"📘 **{hw['course']}**: {hw['details']} (Due: {hw['due_date']})")
 
-# Calendar Tab
-elif tab == "Calendar":
-    st.header("Calendar")
-    st.write("🗓️ View and manage your academic schedule!")
-    for hw in st.session_state.get("homework", []):
-        st.write(f"📅 **{hw['due_date']}**: {hw['course']} - {hw['details']}")
+    # Calendar Tab
+    elif tab == "Calendar":
+        display_calendar(user)
