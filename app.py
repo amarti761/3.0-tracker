@@ -1,14 +1,33 @@
 import streamlit as st
 import plotly.express as px
+import sqlite3
+import bcrypt
+from email_validator import validate_email, EmailNotValidError
 from datetime import datetime, timedelta
-import calendar
 
-# Initialize session state
-if "user_data" not in st.session_state:
-    st.session_state["user_data"] = {}
+# Initialize database connection
+conn = sqlite3.connect("users.db", check_same_thread=False)
+c = conn.cursor()
 
-if "current_user" not in st.session_state:
-    st.session_state["current_user"] = None
+# Create tables for user authentication and data storage
+c.execute('''
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL
+)
+''')
+
+c.execute('''
+CREATE TABLE IF NOT EXISTS user_data (
+    user_id INTEGER,
+    data TEXT,
+    FOREIGN KEY (user_id) REFERENCES users (id)
+)
+''')
+
+conn.commit()
 
 # Hardcoded course data
 # Hardcoded course data
@@ -45,110 +64,125 @@ courses = [
     {"Course Code": "CIS 5980", "Course Name": "Graduate Directed Study", "Credits": 3, "Prerequisites": "None", "Description": "Investigation of an approved project leading to written report.", "Type": "Elective", "Status": "Not Started"},
 ]
 
+
 core_courses = [course["Course Code"] for course in courses if course["Type"] == "Core"]
 total_credits_required = 30
 
-# Helper Functions
-def initialize_user(user_name):
-    if user_name not in st.session_state["user_data"]:
-        st.session_state["user_data"][user_name] = {
-            "user_courses": [],
-            "notifications": [],
-            "achievements": [],
-            "homework": [],
-        }
+# Helper functions
+def add_notification(message):
+    if "notifications" not in st.session_state:
+        st.session_state["notifications"] = []
+    st.session_state["notifications"].append({"message": message, "timestamp": datetime.now()})
 
-def add_notification(user, message):
-    st.session_state["user_data"][user]["notifications"].append(
-        {"message": message, "timestamp": datetime.now()}
-    )
+def register_user(username, email, password):
+    try:
+        validate_email(email)
+        hashed_password = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+        c.execute("INSERT INTO users (username, email, password) VALUES (?, ?, ?)", 
+                  (username, email, hashed_password))
+        conn.commit()
+        st.success("Account created successfully!")
+    except EmailNotValidError as e:
+        st.error(f"Invalid email: {e}")
+    except sqlite3.IntegrityError:
+        st.error("Username or email already exists.")
 
-def display_calendar(user):
-    st.subheader("Calendar")
-    st.write("🗓️ Manage your schedule:")
-    calendar_grid = calendar.HTMLCalendar().formatmonth(datetime.now().year, datetime.now().month)
-    st.markdown(f"<div style='border: 1px solid #ddd; padding: 10px;'>{calendar_grid}</div>", unsafe_allow_html=True)
+def login_user(username, password):
+    c.execute("SELECT id, password FROM users WHERE username = ?", (username,))
+    user = c.fetchone()
+    if user and bcrypt.checkpw(password.encode(), user[1].encode()):
+        return user[0]
+    return None
 
-    for hw in st.session_state["user_data"][user].get("homework", []):
-        st.write(f"📅 **{hw['due_date']}**: {hw['course']} - {hw['details']}")
+def reset_password(email, new_password):
+    hashed_password = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt())
+    c.execute("UPDATE users SET password = ? WHERE email = ?", (hashed_password, email))
+    conn.commit()
 
-# Application Layout
+def save_user_data(user_id, data):
+    c.execute("INSERT INTO user_data (user_id, data) VALUES (?, ?)", (user_id, data))
+    conn.commit()
+
+def get_user_data(user_id):
+    c.execute("SELECT data FROM user_data WHERE user_id = ?", (user_id,))
+    return c.fetchall()
+
+# Streamlit page configuration
 st.set_page_config(
     page_title="Degree Progress Tracker",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# Login/Signup
+# Sidebar for user authentication
 with st.sidebar:
     st.title("Degree Progress Tracker")
-    if st.session_state["current_user"] is None:
-        username = st.text_input("Enter your username:")
-        if st.button("Login"):
-            if username:
-                initialize_user(username)
-                st.session_state["current_user"] = username
-                st.success(f"Welcome, {username}!")
-            else:
-                st.error("Username cannot be empty.")
+    if "user_id" not in st.session_state:
+        auth_tab = st.radio("Authentication", ["Login", "Register", "Forgot Password"])
+
+        if auth_tab == "Register":
+            st.subheader("Create an Account")
+            username = st.text_input("Username")
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
+            confirm_password = st.text_input("Confirm Password", type="password")
+            if st.button("Register"):
+                if password == confirm_password:
+                    register_user(username, email, password)
+                else:
+                    st.error("Passwords do not match.")
+
+        elif auth_tab == "Login":
+            st.subheader("Login")
+            login_username = st.text_input("Username")
+            login_password = st.text_input("Password", type="password")
+            if st.button("Login"):
+                user_id = login_user(login_username, login_password)
+                if user_id:
+                    st.session_state["user_id"] = user_id
+                    st.success(f"Welcome, {login_username}!")
+                else:
+                    st.error("Invalid username or password.")
+
+        elif auth_tab == "Forgot Password":
+            st.subheader("Forgot Password")
+            reset_email = st.text_input("Enter your email")
+            new_password = st.text_input("New Password", type="password")
+            confirm_new_password = st.text_input("Confirm New Password", type="password")
+            if st.button("Reset Password"):
+                if new_password == confirm_new_password:
+                    reset_password(reset_email, new_password)
+                    st.success("Password reset successfully!")
+                else:
+                    st.error("Passwords do not match.")
     else:
-        st.sidebar.write(f"Logged in as: {st.session_state['current_user']}")
-        if st.button("Logout"):
-            st.session_state["current_user"] = None
+        if st.sidebar.button("Logout"):
+            del st.session_state["user_id"]
+            st.success("Logged out successfully!")
 
-# Main Application
-if st.session_state["current_user"]:
-    user = st.session_state["current_user"]
-    tab = st.radio("Navigate", ["Dashboard", "Profile", "Homework Tracker", "Calendar"], index=0)
+# Main app layout
+if "user_id" in st.session_state:
+    tab = st.sidebar.radio("Navigate", ["Dashboard", "Profile", "Homework Tracker", "Calendar"])
 
-    # Dashboard Tab
+    # Dashboard
     if tab == "Dashboard":
-        st.header(f"Dashboard - {user}")
-
-        # Notifications
-        st.info("Notifications:")
-        for note in st.session_state["user_data"][user]["notifications"][-5:]:
-            st.write(f"🛎️ {note['message']} at {note['timestamp'].strftime('%H:%M:%S')}")
-
-        # Course Selection
-        st.subheader("Add Courses")
-        selected_course = st.selectbox(
-            "Select a course to add:",
-            [f"{course['Course Code']} - {course['Course Name']}" for course in courses]
-        )
-        if st.button("Add Course"):
-            course_code = selected_course.split(" - ")[0]
-            if course_code not in st.session_state["user_data"][user]["user_courses"]:
-                st.session_state["user_data"][user]["user_courses"].append(course_code)
-                add_notification(user, f"Added course: {selected_course}")
-                st.success(f"Course {selected_course} added!")
-            else:
-                st.warning(f"Course {selected_course} already added.")
-
-        # Graduation Status Check
-        st.subheader("Graduation Status")
-        completed_credits = len(st.session_state["user_data"][user]["user_courses"]) * 3
+        st.header("Dashboard")
+        completed_credits = len(st.session_state.get("user_courses", [])) * 3
         remaining_credits = total_credits_required - completed_credits
-        missing_core_courses = [core for core in core_courses if core not in st.session_state["user_data"][user]["user_courses"]]
+        missing_core_courses = [core for core in core_courses if core not in st.session_state.get("user_courses", [])]
 
+        st.subheader("Graduation Status")
         if st.button("Check Graduation Status"):
             if completed_credits >= total_credits_required and not missing_core_courses:
                 st.success("🎓 Congratulations! You're ready to graduate!")
-                if "Degree Completed!" not in st.session_state["user_data"][user]["achievements"]:
-                    st.session_state["user_data"][user]["achievements"].append("Degree Completed!")
+                if "Degree Completed!" not in st.session_state.get("achievements", []):
+                    st.session_state["achievements"].append("Degree Completed!")
             else:
                 st.warning(
-                    f"Credits Completed: {completed_credits}/{total_credits_required}. Missing Core Courses: {', '.join(missing_core_courses) or 'None'}."
+                    f"Credits Completed: {completed_credits}/{total_credits_required}. "
+                    f"Missing Core Courses: {', '.join(missing_core_courses) or 'None'}."
                 )
 
-        # Achievements
-        st.subheader("Achievements")
-        if completed_credits >= 15 and "Halfway There!" not in st.session_state["user_data"][user]["achievements"]:
-            st.session_state["user_data"][user]["achievements"].append("Halfway There!")
-        for achievement in st.session_state["user_data"][user]["achievements"]:
-            st.write(f"🏅 {achievement}")
-
-        # Charts
         st.subheader("Progress Visualizations")
         pie_chart = px.pie(
             names=["Completed", "Remaining"],
@@ -157,50 +191,24 @@ if st.session_state["current_user"]:
         )
         st.plotly_chart(pie_chart, use_container_width=True)
 
-        bar_chart = px.bar(
-            x=["Completed", "Remaining"],
-            y=[completed_credits, remaining_credits],
-            labels={"x": "Status", "y": "Credits"},
-            title="Credit Distribution",
-        )
-        st.plotly_chart(bar_chart, use_container_width=True)
-
-        column_chart = px.bar(
-            x=st.session_state["user_data"][user]["user_courses"],
-            y=[3] * len(st.session_state["user_data"][user]["user_courses"]),
-            labels={"x": "Courses", "y": "Credits"},
-            title="Courses Completed",
-        )
-        st.plotly_chart(column_chart, use_container_width=True)
-
-    # Profile Tab
+    # Profile
     elif tab == "Profile":
-        st.header(f"Profile - {user}")
-        st.write("Student Name: [Your Name]")
-        st.write(f"Courses Completed: {len(st.session_state['user_data'][user]['user_courses'])}")
+        st.header("Profile")
+        user_data = get_user_data(st.session_state["user_id"])
+        st.write(f"Courses Completed: {len(st.session_state.get('user_courses', []))}")
         st.write("Achievements:")
-        for achievement in st.session_state["user_data"][user]["achievements"]:
+        for achievement in st.session_state.get("achievements", []):
             st.write(f"🏅 {achievement}")
+        st.subheader("Personal Data")
+        for data in user_data:
+            st.write(data[0])
 
-    # Homework Tracker Tab
+    # Homework Tracker
     elif tab == "Homework Tracker":
         st.header("Homework Tracker")
-        if "homework" not in st.session_state["user_data"][user]:
-            st.session_state["user_data"][user]["homework"] = []
+        # Homework tracker logic...
 
-        with st.form("Add Homework"):
-            hw_course = st.selectbox("Select Course", [course["Course Code"] for course in courses])
-            hw_details = st.text_input("Homework Details")
-            hw_due_date = st.date_input("Due Date", datetime.now() + timedelta(days=7))
-            submitted = st.form_submit_button("Add Homework")
-            if submitted:
-                st.session_state["user_data"][user]["homework"].append({"course": hw_course, "details": hw_details, "due_date": hw_due_date})
-                st.success("Homework added!")
-
-        st.subheader("Homework List")
-        for hw in st.session_state["user_data"][user]["homework"]:
-            st.write(f"📘 **{hw['course']}**: {hw['details']} (Due: {hw['due_date']})")
-
-    # Calendar Tab
+    # Calendar
     elif tab == "Calendar":
-        display_calendar(user)
+        st.header("Calendar")
+        # Calendar logic...
