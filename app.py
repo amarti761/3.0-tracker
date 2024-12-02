@@ -42,6 +42,7 @@ app.layout = dbc.Container(
                             className="mb-3"
                         ),
                         dbc.Button("Add Course", id="add-course-button", color="primary", className="mb-3"),
+                        html.Div(id="course-details", className="mt-4"),  # Display detailed course information
                         html.Div(id="notifications-bar", className="alert alert-info mt-3"),
                         dbc.Button("Check Graduation Status", id="graduation-check-button", color="success", className="mb-3"),
                         html.Div(id="achievements", className="mt-3"),
@@ -74,6 +75,7 @@ app.layout = dbc.Container(
 # Callbacks
 @app.callback(
     [
+        Output("course-details", "children"),
         Output("notifications-bar", "children"),
         Output("pie-chart", "figure"),
         Output("bar-chart", "figure"),
@@ -90,25 +92,32 @@ def update_charts_and_status(add_clicks, grad_clicks, course_code):
     ctx = callback_context
     triggered_id = ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
 
+    # Default placeholders
+    course_details = "Select a course to view details."
     notifications_content = "No notifications yet."
-    achievements_html = html.Ul(
-        [html.Li("No achievements yet. Add courses to earn badges!")]
-    )
+    achievements_html = html.Ul([html.Li("No achievements yet. Add courses to earn badges!")])
 
     # Default placeholder charts
     pie_chart = px.pie(values=[1], names=["No Data"], title="Progress Overview")
     bar_chart = px.bar(x=["No Data"], y=[0], title="Credit Distribution")
     column_chart = px.bar(x=["No Data"], y=[0], title="Courses Completed")
 
+    if course_code:
+        # Get course details
+        course = course_data.loc[course_data['Course Code'] == course_code].iloc[0]
+        course_details = html.Div([
+            html.H4(f"Course Code: {course['Course Code']}"),
+            html.P(f"Course Name: {course['Course Name']}"),
+            html.P(f"Credits: {course['Credits']}"),
+            html.P(f"Prerequisites: {course['Prerequisites']}"),
+            html.P(f"Description: {course['Description']}"),
+            html.P(f"Type: {course['Type']}"),  # Include the Type column dynamically
+            html.P(f"Status: {course['Status']}"),
+        ])
+
     if triggered_id == "add-course-button":
         if not course_code or add_clicks is None:
-            return (
-                "No course selected.",
-                pie_chart,
-                bar_chart,
-                column_chart,
-                achievements_html,
-            )
+            return course_details, "No course selected.", pie_chart, bar_chart, column_chart, achievements_html
 
         # Add course to user data
         if course_code not in user_courses:
@@ -147,10 +156,7 @@ def update_charts_and_status(add_clicks, grad_clicks, course_code):
 
         achievement_icons = {"Halfway There!": "🏅", "Degree Completed!": "🎓"}
         achievements_html = html.Ul(
-            [
-                html.Li(f"{achievement_icons.get(achievement, '')} {achievement}")
-                for achievement in achievements
-            ]
+            [html.Li(f"{achievement_icons.get(achievement, '')} {achievement}") for achievement in achievements]
         )
 
     elif triggered_id == "graduation-check-button":
@@ -172,7 +178,7 @@ def update_charts_and_status(add_clicks, grad_clicks, course_code):
                 ]
             )
 
-    return notifications_content, pie_chart, bar_chart, column_chart, achievements_html
+    return course_details, notifications_content, pie_chart, bar_chart, column_chart, achievements_html
 
 
 @app.callback(
@@ -184,4 +190,6 @@ def toggle_dark_mode(is_dark_mode):
 
 # Run the server
 if __name__ == "__main__":
-    app.run_server(host="0.0.0.0", port=8080, debug=True)
+    app.run_server(debug=True)
+
+    
