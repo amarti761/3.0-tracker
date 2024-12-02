@@ -53,7 +53,6 @@ courses = [
     {"Course Code": "CIS 5980", "Course Name": "Graduate Directed Study", "Credits": 3, "Prerequisites": "None", "Description": "Investigation of an approved project leading to written report.", "Type": "Elective", "Status": "Not Started"},
 ]
 
-
 core_courses = [course["Course Code"] for course in courses if course["Type"] == "Core"]
 total_credits_required = 30
 
@@ -185,13 +184,16 @@ if tab == "Dashboard":
     st.plotly_chart(bar_chart, use_container_width=True)
 
     # Column Chart for Courses Completed
-    column_chart = px.bar(
-        x=st.session_state["user_courses"],
-        y=[3] * len(st.session_state["user_courses"]),
-        labels={"x": "Courses", "y": "Credits"},
-        title="Courses Completed",
-    )
-    st.plotly_chart(column_chart, use_container_width=True)
+    if st.session_state["user_courses"]:
+        column_chart = px.bar(
+            x=st.session_state["user_courses"],
+            y=[3] * len(st.session_state["user_courses"]),
+            labels={"x": "Courses", "y": "Credits"},
+            title="Courses Completed",
+        )
+        st.plotly_chart(column_chart, use_container_width=True)
+    else:
+        st.warning("No courses added yet. Add some courses to see the progress visualization.")
 
 # Profile Tab
 elif tab == "Profile":
