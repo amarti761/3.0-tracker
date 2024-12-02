@@ -6,14 +6,14 @@ import plotly.express as px
 
 # Initialize the app
 app = Dash(__name__, suppress_callback_exceptions=True, external_stylesheets=[dbc.themes.BOOTSTRAP])
-server = app.server  # Expose the server for deployment
+server = app.server  # Expose server for deployment with Gunicorn
 
 # File paths
-COURSE_CATALOG_FILE = "MSIS_CATALOG_SPREADSHEET.csv"
+COURSE_CATALOG_FILE = os.path.join(os.path.dirname(__file__), "MSIS_CATALOG_SPREADSHEET.csv")
 
 # Load course catalog
 if not os.path.exists(COURSE_CATALOG_FILE):
-    raise FileNotFoundError(f"Course catalog file '{COURSE_CATALOG_FILE}' not found.")
+    raise FileNotFoundError(f"Course catalog file '{COURSE_CATALOG_FILE}' not found at {os.getcwd()}")
 
 course_data = pd.read_csv(COURSE_CATALOG_FILE)
 course_catalog = [
@@ -184,5 +184,4 @@ def toggle_dark_mode(is_dark_mode):
 
 # Run the server
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8050))  # Use PORT environment variable
-    app.run_server(debug=True, host="0.0.0.0", port=port)
+    app.run_server(host="0.0.0.0", port=8080, debug=True)
