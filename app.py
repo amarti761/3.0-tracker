@@ -116,8 +116,82 @@ with st.sidebar:
 # Dashboard Tab
 if tab == "Dashboard":
     st.markdown('<div class="custom-header"><h1>Dashboard</h1></div>', unsafe_allow_html=True)
-    st.subheader("📊 Progress Overview")
-    # Dashboard code remains the same...
+
+    # Notifications Bar
+    st.subheader("📢 Notifications")
+    if st.session_state["notifications"]:
+        st.info("Recent Notifications:")
+        for note in st.session_state["notifications"][-5:]:
+            st.write(f"🛎️ {note['message']} at {note['timestamp'].strftime('%H:%M:%S')}")
+    else:
+        st.write("No notifications yet.")
+
+    # Course Selection
+    st.subheader("📚 Add Courses")
+    selected_course = st.selectbox(
+        "Select a course to add:",
+        [f"{course['Course Code']} - {course['Course Name']}" for course in courses]
+    )
+    if st.button("Add Course"):
+        course_code = selected_course.split(" - ")[0]
+        if course_code not in st.session_state["user_courses"]:
+            st.session_state["user_courses"].append(course_code)
+            add_notification(f"Added course: {selected_course}")
+            st.success(f"Course {selected_course} added!")
+        else:
+            st.warning(f"Course {selected_course} already added.")
+
+    # Graduation Status Check
+    st.subheader("🎓 Graduation Status")
+    completed_credits = len(st.session_state["user_courses"]) * 3
+    remaining_credits = total_credits_required - completed_credits
+    missing_core_courses = [core for core in core_courses if core not in st.session_state["user_courses"]]
+
+    if st.button("Check Graduation Status"):
+        if completed_credits >= total_credits_required and not missing_core_courses:
+            st.success("🎓 Congratulations! You're ready to graduate!")
+            if "Degree Completed!" not in st.session_state["achievements"]:
+                st.session_state["achievements"].append("Degree Completed!")
+        else:
+            st.warning(
+                f"Credits Completed: {completed_credits}/{total_credits_required}. Missing Core Courses: {', '.join(missing_core_courses) or 'None'}."
+            )
+
+    # Achievements
+    st.subheader("🏅 Achievements")
+    if completed_credits >= 15 and "Halfway There!" not in st.session_state["achievements"]:
+        st.session_state["achievements"].append("Halfway There!")
+    for achievement in st.session_state["achievements"]:
+        st.write(f"🏅 {achievement}")
+
+    # Visualizations
+    st.subheader("📊 Progress Visualizations")
+
+    # Pie Chart for Progress Overview
+    pie_chart = px.pie(
+        names=["Completed", "Remaining"],
+        values=[completed_credits, remaining_credits],
+        title="Progress Overview",
+    )
+    st.plotly_chart(pie_chart, use_container_width=True)
+
+    # Bar Chart for Credit Distribution
+    bar_chart = px.bar(
+        x=["Completed", "Remaining"],
+        y=[completed_credits, remaining_credits],
+        labels={"x": "Status", "y": "Credits"},
+        title="Credit Distribution",
+    )
+    st.plotly_chart(bar_chart, use_container_width=True)
+
+    # Column Chart for Courses Completed
+    column_chart = px.bar(
+        x=st.session_state["user_courses"],
+        y=[3] * len(st.session_state["user_courses"]),
+        labels={"x": "Courses", "y": "Credits"},
+        title="Courses Completed",
+    )
+    st.plotly_chart(column_chart, use_container_width=True)
 
 # Profile Tab
 elif tab == "Profile":
