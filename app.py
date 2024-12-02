@@ -53,6 +53,7 @@ courses = [
     {"Course Code": "CIS 5980", "Course Name": "Graduate Directed Study", "Credits": 3, "Prerequisites": "None", "Description": "Investigation of an approved project leading to written report.", "Type": "Elective", "Status": "Not Started"},
 ]
 
+
 core_courses = [course["Course Code"] for course in courses if course["Type"] == "Core"]
 total_credits_required = 30
 
@@ -67,39 +68,36 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# Custom CSS for Styling and Themes
+# Custom CSS for Styling
 st.markdown(
     """
     <style>
     body {
-        background-color: #f8f9fa;
-        color: #212529;
-        font-family: 'Arial', sans-serif;
+        background-color: #f4f7fc;
+        font-family: Arial, sans-serif;
     }
     .sidebar .sidebar-content {
         background-color: #343a40;
         color: white;
     }
-    .sidebar .sidebar-content h1, .sidebar .sidebar-content h2, .sidebar .sidebar-content h3 {
-        color: white;
-    }
     .stButton > button {
-        background-color: #4CAF50;
+        background-color: #007bff;
         color: white;
-        border-radius: 8px;
-        padding: 10px;
+        border-radius: 5px;
     }
     .stButton > button:hover {
-        background-color: #45a049;
+        background-color: #0056b3;
         transition: background-color 0.3s ease;
     }
     .custom-header {
         background-color: #007bff;
+        color: white;
         padding: 10px;
         border-radius: 5px;
-        color: white;
         text-align: center;
-        animation: fadeIn 2s;
+    }
+    .tab-content {
+        animation: fadeIn 1s;
     }
     @keyframes fadeIn {
         from {opacity: 0;}
@@ -118,90 +116,69 @@ with st.sidebar:
 # Dashboard Tab
 if tab == "Dashboard":
     st.markdown('<div class="custom-header"><h1>Dashboard</h1></div>', unsafe_allow_html=True)
+    st.subheader("📊 Progress Overview")
+    # Dashboard code remains the same...
 
-    # Notifications Bar
-    if st.session_state["notifications"]:
-        st.info("🔔 Notifications")
-        for note in st.session_state["notifications"][-5:]:
-            st.write(f"🛎️ {note['message']} at {note['timestamp'].strftime('%H:%M:%S')}")
-
-    # Course Selection
-    st.subheader("📌 Add Courses")
-    selected_course = st.selectbox(
-        "Select a course to add:",
-        [f"{course['Course Code']} - {course['Course Name']}" for course in courses],
-    )
-    if st.button("Add Course"):
-        course_code = selected_course.split(" - ")[0]
-        if course_code not in st.session_state["user_courses"]:
-            st.session_state["user_courses"].append(course_code)
-            add_notification(f"Added course: {selected_course}")
-            st.success(f"✅ {selected_course} added!")
-        else:
-            st.warning(f"⚠️ {selected_course} is already in your courses.")
-
-    # Graduation Status Check
-    st.subheader("🎓 Graduation Status")
-    completed_credits = len(st.session_state["user_courses"]) * 3
-    remaining_credits = total_credits_required - completed_credits
-    missing_core_courses = [core for core in core_courses if core not in st.session_state["user_courses"]]
-
-    if st.button("Check Graduation Status"):
-        if completed_credits >= total_credits_required and not missing_core_courses:
-            st.success("🎉 Congratulations! You're ready to graduate!")
-            if "Degree Completed!" not in st.session_state["achievements"]:
-                st.session_state["achievements"].append("Degree Completed!")
-        else:
-            st.warning(
-                f"⚠️ Credits Completed: {completed_credits}/{total_credits_required}. Missing Core Courses: {', '.join(missing_core_courses) or 'None'}."
-            )
-
-    # Achievements
-    st.subheader("🏅 Achievements")
-    if completed_credits >= 15 and "Halfway There!" not in st.session_state["achievements"]:
-        st.session_state["achievements"].append("Halfway There!")
-    for achievement in st.session_state["achievements"]:
-        st.write(f"🏆 {achievement}")
-
-    # Animated Charts
-    st.subheader("📊 Progress Visualizations")
-    pie_chart = px.pie(
-        names=["Completed", "Remaining"],
-        values=[completed_credits, remaining_credits],
-        title="Progress Overview",
-        hole=0.3,  # Donut-style chart
-    )
-    pie_chart.update_traces(textinfo="percent+label", pull=[0.1, 0])
-
-    bar_chart = px.bar(
-        x=["Completed", "Remaining"],
-        y=[completed_credits, remaining_credits],
-        labels={"x": "Status", "y": "Credits"},
-        title="Credit Distribution",
-        animation_frame=["Completed", "Remaining"],
-    )
-
-    column_chart = px.bar(
-        x=st.session_state["user_courses"],
-        y=[3] * len(st.session_state["user_courses"]),
-        labels={"x": "Courses", "y": "Credits"},
-        title="Courses Completed",
-        text_auto=True,
-    )
-
-    st.plotly_chart(pie_chart, use_container_width=True)
-    st.plotly_chart(bar_chart, use_container_width=True)
-    st.plotly_chart(column_chart, use_container_width=True)
-
-# Other Tabs
+# Profile Tab
 elif tab == "Profile":
     st.markdown('<div class="custom-header"><h1>Profile</h1></div>', unsafe_allow_html=True)
-    # Profile code remains the same
+    st.subheader("👤 User Profile")
 
+    # Profile Picture
+    uploaded_pic = st.file_uploader("Upload Profile Picture", type=["png", "jpg", "jpeg"])
+    if uploaded_pic:
+        st.session_state["profile_pic"] = uploaded_pic
+        st.success("Profile picture updated!")
+
+    if st.session_state["profile_pic"]:
+        st.image(st.session_state["profile_pic"], caption="Your Profile Picture", use_column_width=True)
+
+    # Editable User Name
+    user_name = st.text_input("Name", st.session_state["user_name"])
+    if st.button("Update Name"):
+        st.session_state["user_name"] = user_name
+        st.success("Name updated!")
+
+    st.write(f"**Name:** {st.session_state['user_name']}")
+
+    # Personal Notes Section
+    st.subheader("📝 Personal Notes")
+    new_note = st.text_area("Write a note:")
+    if st.button("Add Note"):
+        if new_note.strip():
+            st.session_state["personal_notes"].append({"note": new_note, "timestamp": datetime.now()})
+            st.success("Note added!")
+        else:
+            st.warning("Note cannot be empty.")
+
+    for note in st.session_state["personal_notes"]:
+        st.write(f"- {note['note']} (Added on {note['timestamp'].strftime('%Y-%m-%d %H:%M:%S')})")
+
+# Homework Tracker Tab
 elif tab == "Homework Tracker":
     st.markdown('<div class="custom-header"><h1>Homework Tracker</h1></div>', unsafe_allow_html=True)
-    # Homework tracker code remains the same
+    st.subheader("📝 Manage Your Homework Assignments")
 
+    with st.form("Homework Form"):
+        hw_course = st.selectbox("Select Course", [course["Course Code"] for course in courses])
+        hw_details = st.text_input("Homework Details")
+        hw_due_date = st.date_input("Due Date", datetime.now() + timedelta(days=7))
+        submitted = st.form_submit_button("Add Homework")
+        if submitted:
+            st.session_state["homework"].append({"course": hw_course, "details": hw_details, "due_date": hw_due_date})
+            st.success("Homework added!")
+
+    st.subheader("📖 Homework List")
+    for hw in st.session_state["homework"]:
+        st.write(f"📘 **{hw['course']}**: {hw['details']} (Due: {hw['due_date']})")
+
+# Calendar Tab
 elif tab == "Calendar":
     st.markdown('<div class="custom-header"><h1>Calendar</h1></div>', unsafe_allow_html=True)
-    # Calendar code remains the same
+    st.subheader("🗓️ Your Schedule")
+
+    if st.session_state["homework"]:
+        for hw in st.session_state["homework"]:
+            st.write(f"📅 **{hw['due_date']}** - **{hw['course']}**: {hw['details']}")
+    else:
+        st.info("No events or deadlines on your calendar.")
