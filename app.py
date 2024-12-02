@@ -193,5 +193,10 @@ def toggle_dark_mode(is_dark_mode):
     return "dark-mode" if is_dark_mode else "light-mode"
 
 # Run the server
+import os
+
+# At the end of your app.py
 if __name__ == "__main__":
-    app.run_server(debug=True)
+    port = int(os.environ.get("PORT", 8050))  # Use the PORT variable provided by Render
+    app.run_server(debug=True, host="0.0.0.0", port=port)  # Bind to all IPs and use the port
+
